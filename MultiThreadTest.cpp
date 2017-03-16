@@ -59,17 +59,9 @@ class BufferFile {
     }
 };
 
-void GetImageFile(const std::string image_file,
+void GetImageFile(const cv::Mat& im_ori,
                   mx_float* image_data, const int channels,
                   const cv::Size resize_size, const mx_float* mean_data = nullptr) {
-    // Read all kinds of file into a BGR color 3 channels image
-    cv::Mat im_ori = cv::imread(image_file, cv::IMREAD_COLOR);
-
-    if (im_ori.empty()) {
-        std::cerr << "Can't open the image. Please check " << image_file << ". \n";
-        assert(false);
-    }
-
     cv::Mat im;
 
     resize(im_ori, im, resize_size);
@@ -105,13 +97,70 @@ void GetImageFile(const std::string image_file,
     }
 }
 
+void GetImageFile(const std::string image_file,
+                  mx_float* image_data, const int channels,
+                  const cv::Size resize_size, const mx_float* mean_data = nullptr) {
+    // Read all kinds of file into a BGR color 3 channels image
+    cv::Mat im_ori = cv::imread(image_file, cv::IMREAD_COLOR);
+
+    GetImageFile(im_ori, image_data, channels, resize_size, mean_data);
+}
+
 std::vector<mx_float> image_as_floats;
 std::vector<PredictorHandle> predictors;
 
-#define NUM_INFERENCES 10
+#define NUM_INFERENCES_PER_THREAD 10
 
 void thread_inference_from_array(int index) {
-	for(int i=0; i<NUM_INFERENCES; i++) {
+	for(int i=0; i<NUM_INFERENCES_PER_THREAD; i++) {
+
+		high_resolution_clock::time_point time_start = high_resolution_clock::now();
+
+		// Set Input Image
+		MXPredSetInput(predictors[index], "data", image_as_floats.data(), image_as_floats.size());
+
+		// Do Predict Forward
+		MXPredForward(predictors[index]);
+
+		mx_uint output_index = 0;
+
+		mx_uint *shape = 0;
+		mx_uint shape_len;
+
+		// Get Output Result
+		MXPredGetOutputShape(predictors[index], output_index, &shape, &shape_len);
+
+		size_t size = 1;
+		for (mx_uint i = 0; i < shape_len; ++i) size *= shape[i];
+
+		std::vector<float> data(size);
+
+		MXPredGetOutput(predictors[index], output_index, &(data[0]), size);
+
+		high_resolution_clock::time_point time_end = high_resolution_clock::now();
+		duration<double> time_span = duration_cast<duration<double>>(time_end - time_start);
+
+		std::cout << "Thread " << index << ", inference: " << i << " took " << time_span.count() << " sec" << std::endl;
+	}
+}
+
+cv::Mat image_as_cv;
+
+void thread_inference_from_mat(int index) {
+	for(int i=0; i<NUM_INFERENCES_PER_THREAD; i++) {
+
+		int width = 224;
+	    int height = 224;
+	    int channels = 3;
+
+	    std::vector<mx_float> image_as_floats;
+
+	    int image_size = width * height * channels;
+	    const mx_float* nd_data = NULL;
+	    image_as_floats.resize(image_size);
+	    GetImageFile(image_as_cv, image_as_floats.data(),
+	                 channels, cv::Size(width, height), nd_data);
+
 
 		high_resolution_clock::time_point time_start = high_resolution_clock::now();
 
@@ -187,20 +236,18 @@ void initialize(int num_threads, int dev_type, const std::string& json_file,
 	}
 
     int image_size = width * height * channels;
-
-    // Read Mean Data
     const mx_float* nd_data = NULL;
-
     image_as_floats.resize(image_size);
-
     GetImageFile(image_file, image_as_floats.data(),
                  channels, cv::Size(width, height), nd_data);
+
+    image_as_cv = cv::imread(image_file, cv::IMREAD_COLOR);
 }
 
 int main(int argc, char* argv[]) {
-    if (argc < 6) {
+    if (argc < 7) {
         std::cout << "No test image here." << std::endl
-        << "Usage: ./image-classification-predict dev_type num_threads apple.jpg json_file params_file" << std::endl;
+        << "Usage: ./image-classification-predict dev_type num_threads apple.jpg resize? json_file params_file" << std::endl;
         return 0;
     }
 
@@ -211,15 +258,26 @@ int main(int argc, char* argv[]) {
     std::string image_file;
     image_file = std::string(argv[3]);
 
+    bool should_resize = (strtol(argv[4], nullptr, 10) == 1);
+    if(should_resize) {
+    	std::cout << "Will include time to resize image" << std::endl;
+    } else {
+    	std::cout << "Will not include time to resize image" << std::endl;
+    }
+
     // Models path for your model, you have to modify it
-    std::string json_file = std::string(argv[4]);
-    std::string param_file = std::string(argv[5]);
+    std::string json_file = std::string(argv[5]);
+    std::string param_file = std::string(argv[6]);
 
     initialize(num_threads, dev_type, json_file, param_file, image_file);
 
     boost::thread threads[num_threads];
     for(int i=0; i<num_threads; i++) {
-    	threads[i] = boost::thread(thread_inference_from_array, i);
+    	if(should_resize) {
+    		threads[i] = boost::thread(thread_inference_from_mat, i);
+    	} else {
+    		threads[i] = boost::thread(thread_inference_from_array, i);
+    	}
     }
     for(int i=0; i<num_threads; i++) {
     	threads[i].join();
