@@ -8,10 +8,13 @@
 #include <vector>
 #include <ctime>
 
+#include <chrono>
 #include <boost/thread.hpp>
 #include <opencv2/opencv.hpp>
 
 const mx_float DEFAULT_MEAN = 117.0;
+
+using namespace std::chrono;
 
 // Read file to buffer
 class BufferFile {
@@ -154,7 +157,7 @@ std::vector<PredictorHandle> predictors;
 void thread_inference_from_array(int index) {
 	for(int i=0; i<NUM_INFERENCES; i++) {
 
-		const clock_t begin_time = clock();
+		high_resolution_clock::time_point time_start = high_resolution_clock::now();
 
 		// Set Input Image
 		MXPredSetInput(predictors[index], "data", image_as_floats.data(), image_as_floats.size());
@@ -177,9 +180,10 @@ void thread_inference_from_array(int index) {
 
 		MXPredGetOutput(predictors[index], output_index, &(data[0]), size);
 
-		float time_taken = float( clock () - begin_time ) /  CLOCKS_PER_SEC;
+		high_resolution_clock::time_point time_end = high_resolution_clock::now();
+		duration<double> time_span = duration_cast<duration<double>>(time_end - time_start);
 
-		std::cout << "Thread " << index << ", inference: " << i << " took " << time_taken << " sec" << std::endl;
+		std::cout << "Thread " << index << ", inference: " << i << " took " << time_span.count() << " sec" << std::endl;
 	}
 }
 
