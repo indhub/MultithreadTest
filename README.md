@@ -12,7 +12,7 @@ MultithreadTest <device_type> <num_threads> <image> <symbol_file> <params_file>
 
 <num_threads> - Number of inference to run in parallel
 
-<image> - Image to run inference on
+\<image> - Image to run inference on
 
 <symbol_file> - The .json symbol file for the model to use
 
