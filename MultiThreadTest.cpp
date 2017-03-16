@@ -105,50 +105,6 @@ void GetImageFile(const std::string image_file,
     }
 }
 
-// LoadSynsets
-// Code from : https://github.com/pertusa/mxnet_predict_cc/blob/master/mxnet_predict.cc
-std::vector<std::string> LoadSynset(std::string synset_file) {
-    std::ifstream fi(synset_file.c_str());
-
-    if ( !fi.is_open() ) {
-        std::cerr << "Error opening synset file " << synset_file << std::endl;
-        assert(false);
-    }
-
-    std::vector<std::string> output;
-
-    std::string synset, lemma;
-    while ( fi >> synset ) {
-        getline(fi, lemma);
-        output.push_back(lemma);
-    }
-
-    fi.close();
-
-    return output;
-}
-
-void PrintOutputResult(const std::vector<float>& data, const std::vector<std::string>& synset) {
-    if (data.size() != synset.size()) {
-        std::cerr << "Result data and synset size does not match!" << std::endl;
-    }
-
-    float best_accuracy = 0.0;
-    int best_idx = 0;
-
-    for ( int i = 0; i < static_cast<int>(data.size()); i++ ) {
-        printf("Accuracy[%d] = %.8f\n", i, data[i]);
-
-        if ( data[i] > best_accuracy ) {
-            best_accuracy = data[i];
-            best_idx = i;
-        }
-    }
-
-    printf("Best Result: [%s] id = %d, accuracy = %.8f\n",
-    synset[best_idx].c_str(), best_idx, best_accuracy);
-}
-
 std::vector<mx_float> image_as_floats;
 std::vector<PredictorHandle> predictors;
 
