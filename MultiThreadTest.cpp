@@ -247,7 +247,7 @@ void initialize(int num_threads, int dev_type, const std::string& json_file,
 int main(int argc, char* argv[]) {
     if (argc < 7) {
         std::cout << "No test image here." << std::endl
-        << "Usage: ./image-classification-predict dev_type num_threads apple.jpg resize? json_file params_file" << std::endl;
+        << "Usage: ./MultiThreadTest dev_type num_threads apple.jpg resize? json_file params_file" << std::endl;
         return 0;
     }
 
