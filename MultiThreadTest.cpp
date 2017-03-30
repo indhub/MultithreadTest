@@ -192,7 +192,7 @@ void thread_inference_from_mat(int index) {
 	}
 }
 
-void initialize(int num_threads, int dev_type, const std::string& json_file,
+void initialize(int dev_type, int num_threads, unsigned int batch_size, const std::string& json_file,
 		const std::string& param_file, const std::string& image_file) {
 
     BufferFile json_data(json_file);
@@ -209,7 +209,7 @@ void initialize(int num_threads, int dev_type, const std::string& json_file,
     int channels = 3;
 
     const mx_uint input_shape_indptr[2] = { 0, 4 };
-    const mx_uint input_shape_data[4] = { 1,
+    const mx_uint input_shape_data[4] = { batch_size,
                                         static_cast<mx_uint>(channels),
                                         static_cast<mx_uint>(width),
                                         static_cast<mx_uint>(height) };
@@ -237,9 +237,12 @@ void initialize(int num_threads, int dev_type, const std::string& json_file,
 
     int image_size = width * height * channels;
     const mx_float* nd_data = NULL;
-    image_as_floats.resize(image_size);
-    GetImageFile(image_file, image_as_floats.data(),
-                 channels, cv::Size(width, height), nd_data);
+    image_as_floats.resize(image_size*batch_size);
+
+    for(int i=0; i<batch_size; i++) {
+		GetImageFile(image_file, image_as_floats.data() + (image_size*i),
+					 channels, cv::Size(width, height), nd_data);
+    }
 
     image_as_cv = cv::imread(image_file, cv::IMREAD_COLOR);
 }
@@ -247,7 +250,7 @@ void initialize(int num_threads, int dev_type, const std::string& json_file,
 int main(int argc, char* argv[]) {
     if (argc < 7) {
         std::cout << "No test image here." << std::endl
-        << "Usage: ./MultiThreadTest dev_type num_threads apple.jpg resize? json_file params_file" << std::endl;
+        << "Usage: ./image-classification-predict dev_type num_threads batch_size apple.jpg resize? json_file params_file" << std::endl;
         return 0;
     }
 
@@ -255,10 +258,12 @@ int main(int argc, char* argv[]) {
 
     int num_threads = strtol(argv[2], nullptr, 10);
 
-    std::string image_file;
-    image_file = std::string(argv[3]);
+    unsigned int batch_size = strtol(argv[3], nullptr, 10);
 
-    bool should_resize = (strtol(argv[4], nullptr, 10) == 1);
+    std::string image_file;
+    image_file = std::string(argv[4]);
+
+    bool should_resize = (strtol(argv[5], nullptr, 10) == 1);
     if(should_resize) {
     	std::cout << "Will include time to resize image" << std::endl;
     } else {
@@ -266,10 +271,10 @@ int main(int argc, char* argv[]) {
     }
 
     // Models path for your model, you have to modify it
-    std::string json_file = std::string(argv[5]);
-    std::string param_file = std::string(argv[6]);
+    std::string json_file = std::string(argv[6]);
+    std::string param_file = std::string(argv[7]);
 
-    initialize(num_threads, dev_type, json_file, param_file, image_file);
+    initialize(dev_type, num_threads, batch_size, json_file, param_file, image_file);
 
     boost::thread threads[num_threads];
     for(int i=0; i<num_threads; i++) {
