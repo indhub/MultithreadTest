@@ -10,11 +10,15 @@
 
 #include <chrono>
 #include <boost/thread.hpp>
+#include <boost/interprocess/sync/interprocess_semaphore.hpp>
 #include <opencv2/opencv.hpp>
 
 const mx_float DEFAULT_MEAN = 117.0;
 
 using namespace std::chrono;
+
+boost::interprocess::interprocess_semaphore job_available(0);
+boost::interprocess::interprocess_semaphore job_done(0);
 
 // Read file to buffer
 class BufferFile {
@@ -112,7 +116,10 @@ std::vector<PredictorHandle> predictors;
 #define NUM_INFERENCES_PER_THREAD 10
 
 void thread_inference_from_array(int index) {
-	for(int i=0; i<NUM_INFERENCES_PER_THREAD; i++) {
+
+	while(true) {
+
+		job_available.wait();
 
 		high_resolution_clock::time_point time_start = high_resolution_clock::now();
 
@@ -140,7 +147,8 @@ void thread_inference_from_array(int index) {
 		high_resolution_clock::time_point time_end = high_resolution_clock::now();
 		duration<double> time_span = duration_cast<duration<double>>(time_end - time_start);
 
-		std::cout << "Thread " << index << ", inference: " << i << " took " << time_span.count() << " sec" << std::endl;
+		//std::cout << "Thread " << index << ", inference: " << i << " took " << time_span.count() << " sec" << std::endl;
+		job_done.post();
 	}
 }
 
@@ -292,8 +300,19 @@ int main(int argc, char* argv[]) {
     		threads[i] = boost::thread(thread_inference_from_array, i);
     	}
     }
-    for(int i=0; i<num_threads; i++) {
-    	threads[i].join();
+
+    while(true) {
+    	high_resolution_clock::time_point time_start = high_resolution_clock::now();
+    	for(int i=0; i<num_threads; i++) {
+    		job_available.post();
+    	}
+    	for(int i=0; i<num_threads; i++) {
+    		job_done.wait();
+    	}
+		high_resolution_clock::time_point time_end = high_resolution_clock::now();
+		duration<double> time_span = duration_cast<duration<double>>(time_end - time_start);
+
+		std::cout << "All threads took " << time_span.count() << " sec" << std::endl;
     }
 
     std::cout << "Done" << std::endl;
